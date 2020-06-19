@@ -90,6 +90,39 @@ Matrix sobelFilter(float* image, int nRows, int nCols){
 	return newImage;
 }
 
+Matrix sobelFilter(float* image, int nRows, int nCols, int dim){
+	// Gx: dim = 0
+	// Gy: dim = 1
+	Matrix newImage(nRows, nCols);
+	float gValue;
+
+	int radio = defaultMaskSize / 2;
+	for (int i = 0; i < nRows; ++i){
+		for (int j = 0; j < nCols; ++j){
+			float sumG = 0;
+			for (int x = -radio; x <= radio; ++x){
+				for (int y = -radio; y <= radio; ++y){
+					int nx = x + i;
+					int ny = y + j;
+					if (nx >= 0 && ny >= 0 && nx < nRows && ny < nCols){
+						float grayValueNeighbor = image[nx * nCols + ny];
+						if(dim == 0){
+							//Sobel mask for x-direction:
+							gValue = gxDefault[ x + radio][y + radio];
+						}else if(dim == 1){
+							//%Sobel mask for x-direction:
+							gValue = gyDefault[ x + radio][y + radio];
+						}
+						sumG += gValue * grayValueNeighbor;
+					}
+				}
+			}
+			newImage(i, j) = sumG;
+		}
+	}
+	return newImage;
+}
+
 /*
 Get default values as array
 */
