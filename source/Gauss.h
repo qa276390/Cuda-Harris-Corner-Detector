@@ -15,8 +15,42 @@ Matrix createGaussianKernel( int size , double sigma ){
 
 	for( int x = 0 ; x < size ; ++x ){
 		for( int y = 0 ; y < size ; ++y ){
-			kernel( x, y ) = exp( -0.5 * ( ( x - mean ) * ( x - mean ) + ( y - mean ) * ( y - mean ) )/(sigma * sigma) );
+			kernel( x, y ) = exp( -0.5 * ( ( x - mean ) * ( x - mean ) + ( y - mean ) * ( y - mean ) )/(sigma * sigma) ); //why 0.5?
             sum += kernel(x , y);
+		}
+	}
+ 
+	for( int x = 0 ; x < size ; ++x ){
+		for( int y = 0 ; y < size ; ++y ){
+			kernel( x, y) /= sum;
+		}
+	}
+
+	return kernel;
+}
+/*
+ * Create a Gaussian kenel in specific dimension of size*size based on sigma
+ * Gx: dim = 0
+ * Gy: dim = 1
+ */
+
+Matrix createGaussianKernel( int size , double sigma, int dim){
+	
+	Matrix kernel( size, size );
+	double mean = size/2;
+	double sum = 0.0;
+	double r = 0.0;
+
+	for( int x = 0 ; x < size ; ++x ){
+		for( int y = 0 ; y < size ; ++y ){
+			if(dim==0){//Gx
+				r = ( ( x - mean ) * ( x - mean ));
+			}else if(dim==1){//Gy
+				r = ( ( y - mean ) * ( y - mean ) );
+			}
+				
+			kernel( x, y ) = exp( -r / (sigma * sigma) );
+      sum += kernel(x , y);
 		}
 	}
  

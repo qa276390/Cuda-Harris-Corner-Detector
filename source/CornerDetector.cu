@@ -259,7 +259,7 @@ float serialCornerDetector(Matrix grayImage, Matrix gaussianKernel, string pathN
 	PPMImage* result = createImage(sobel.getRows(), sobel.getCols());
 	Matrix normalized = normalize(sobel, 0, 255);
 	matrixToImage(normalized, result);
-    #ifdef _WIN32
+  #ifdef _WIN32
 		pathName = "..\\output\\"+pathName+"_cpu.ppm";
 	#else
 	    pathName = "../output/"+pathName+"_cpu.ppm";  
@@ -283,50 +283,70 @@ float serialHarrisCornerDetector(Matrix grayImage,  string pathName, int gaussKe
 	clock_t startTime, endTime, clockTicksTaken;
 	
 	///////////////Create Gaussian Kernel////////////////////
-	Matrix gaussianKernelx = createGaussianKernel(gaussKernelSize, sigma); //to-do write for gx
-	Matrix gaussianKernely = createGaussianKernel(gaussKernelSize, sigma); //to-do write for gy
+	Matrix gaussianKernelx= createGaussianKernel(gaussKernelSize, sigma, 0); 
+	Matrix gaussianKernely = createGaussianKernel(gaussKernelSize, sigma, 1); 
+	Matrix gaussianKernel = createGaussianKernel(gaussKernelSize, sigma); // could be different sigma 
 
 
-	///////////////Gaussian Blur to Remove Noise//////////////
-	float* grayImageArray = grayImage.toArray(), *kernelArray = gaussianKernel.toArray();
+	///////////////Calculate Ix and Iy//////////////
+	float* grayImageArray = grayImage.toArray(), *kernelArrayx = gaussianKernelx.toArray(), *kernelArrayy = gaussianKernely.toArray();
 	startTime = clock();
-	Matrix noiseRemoval = GaussianBlur(grayImageArray, kernelArray, grayImage.getRows(),
-									   grayImage.getCols(), gaussianKernel.getRows());
-	//Matrix noiseRemoval = GaussianBlur(grayImage, gaussianKernel);
-	endTime = clock();
-	clockTicksTaken = endTime - startTime;
-	double gaussTime = clockTicksTaken / (double)CLOCKS_PER_SEC; //gaussTime *= 1000.0;
+	Matrix Ix = GaussianBlur(grayImageArray, kernelArrayx, grayImage.getRows(),
+									   grayImage.getCols(), gaussianKernelx.getRows());
+	Matrix Iy = GaussianBlur(grayImageArray, kernelArrayy, grayImage.getRows(),
+									   grayImage.getCols(), gaussianKernely.getRows());
+
 	freeArray(grayImageArray);
+	freeArray(kernelArrayx);
+	freeArray(kernelArrayy);
+	///////////////////////////////////////////////////////////
+
+
+	//////////Calculate S_(x^2), S_(y^2), S_(x*y)//////////////
+	Matrix Ixx = Ix * Ix;
+	Matrix Iyy = Iy * Iy;
+	Matrix Ixy = Ix * Iy;
+	float* IxxArray = Ixx.toArray(), *IyyArray = Iyy.toArray(), *IxyArray = Ixy.toArray(), *kernelArray = gaussianKernel.toArray();
+	Matrix Sxx = GaussianBlur(IxxArray, kernelArray,Ixx.getRows(),
+									   Ixx.getCols(), gaussianKernel.getRows());
+	Matrix Syy = GaussianBlur(IyyArray, kernelArray, Iyy.getRows(),
+									   Iyy.getCols(), gaussianKernel.getRows());
+	Matrix Sxy = GaussianBlur(IxyArray, kernelArray, Ixy.getRows(),
+									   Ixy.getCols(), gaussianKernel.getRows());
+
+	freeArray(IxxArray);
+	freeArray(IyyArray);
+	freeArray(IxyArray);
 	freeArray(kernelArray);
 	///////////////////////////////////////////////////////////
 
-	///////////////Sobel Filter to Detect Corners//////////////
-	float* noiseRemovalArray = noiseRemoval.toArray();
-	startTime = clock();
-	Matrix sobel = sobelFilter(noiseRemovalArray, noiseRemoval.getRows(), noiseRemoval.getCols());
-	//Matrix sobel = sobelFilter(noiseRemoval);
+
+
+	//////////Calculate R = det(M) - k(trace(M))^2///////////// 
+  Matrix detM = Sxx * Syy - Sxy * Sxy;
+	Matrix trM = Sxx + Syy;
+	Matrix R = detM/(trM + 1E-8);
+
+	///////////////////////////////////////////////////////////
+	
 	endTime = clock();
 	clockTicksTaken = endTime - startTime;
-	double sobelTime = clockTicksTaken / (double)CLOCKS_PER_SEC; //sobelTime *= 1000.0;
-	freeArray(noiseRemovalArray);
-	///////////////////////////////////////////////////////////
-
+	double gaussTime = clockTicksTaken / (double)CLOCKS_PER_SEC; //gaussTime *= 1000.0;
+	
 	///////////////Save Image Result/////////////////
-	PPMImage* result = createImage(sobel.getRows(), sobel.getCols());
-	Matrix normalized = normalize(sobel, 0, 255);
+	PPMImage* result = createImage(R.getRows(), R.getCols());
+	Matrix normalized = normalize(R, 0, 255);
 	matrixToImage(normalized, result);
     #ifdef _WIN32
-		pathName = "..\\output\\"+pathName+"_cpu.ppm";
+		pathName = "..\\output\\"+pathName+"_harris_cpu.ppm";
 	#else
-	    pathName = "../output/"+pathName+"_cpu.ppm";  
+	    pathName = "../output/"+pathName+"_harris_cpu.ppm";  
 	#endif
 	writePPM(pathName.c_str(), result);
 	freeImage(result);
 	/////////////////////////////////////////////////
 
-	cout << "CPU Gauss Time: " << gaussTime << "s." << endl;
-	cout << "CPU Sobel Time: " << sobelTime << "s." << endl;
-	cout << "CPU Time: " << gaussTime + sobelTime << "s." << endl;
+	cout << "CPU Time: " << gaussTime << "s." << endl;
 
-	return gaussTime + sobelTime;
+	return gaussTime;
 }

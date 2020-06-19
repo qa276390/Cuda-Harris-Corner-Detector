@@ -22,6 +22,11 @@ class Matrix{
         Matrix( int rows, int cols );
         Matrix( int rows, int cols, T value );
         Matrix& operator=( const Matrix& rhs );
+        Matrix operator-( const Matrix& rhs );
+        Matrix operator+( const Matrix& rhs );
+        Matrix operator+( float rhx );
+        Matrix operator*( const Matrix& rhs );
+        Matrix operator/( const Matrix& rhs );
         Matrix(const Matrix &other);
         Matrix( int rows, int cols, T** values );
         ~Matrix();
@@ -85,7 +90,7 @@ Matrix::Matrix(){
 
 }
 
-Matrix& Matrix::operator=( const Matrix& other ) {
+Matrix& Matrix::operator=( const Matrix& other ) { // assign data
     rows = other.rows;
     cols = other.cols;
     allocateMatrix();
@@ -93,6 +98,72 @@ Matrix& Matrix::operator=( const Matrix& other ) {
     return *this;
 }
 
+Matrix Matrix::operator*( const Matrix& other ) { // element-wise multiplication
+    if( rows!=other.rows || cols != other.cols){
+			return *(new Matrix());
+		}
+		Matrix result = Matrix(rows, cols);
+    
+		for( int i = 0 ; i < rows; ++i ){
+        for( int j = 0 ; j < cols ; ++j ){
+            result.setValue(i, j, data[i][j] * other.data[i][j]);
+        }
+		}
+    
+    return result;
+}
+
+Matrix Matrix::operator+( const Matrix& other ) { // element-wise addition
+    if( rows!=other.rows || cols != other.cols){
+			return *(new Matrix());
+		}
+		Matrix result = Matrix(rows, cols);
+    
+		for( int i = 0 ; i < rows; ++i ){
+        for( int j = 0 ; j < cols ; ++j ){
+            result.setValue(i, j, data[i][j] + other.data[i][j]);
+        }
+		}
+    return result;
+}
+
+Matrix Matrix::operator+( float rhx ) { // element-wise addition
+		Matrix result = Matrix(rows, cols);
+    
+		for( int i = 0 ; i < rows; ++i ){
+        for( int j = 0 ; j < cols ; ++j ){
+            result.setValue(i, j, data[i][j] + rhx);
+        }
+		}
+    return result;
+}
+Matrix Matrix::operator-( const Matrix& other ) { // element-wise multiplication
+    if( rows!=other.rows || cols != other.cols){
+			return *(new Matrix());
+		}
+		Matrix result = Matrix(rows, cols);
+    
+		for( int i = 0 ; i < rows; ++i ){
+        for( int j = 0 ; j < cols ; ++j ){
+            result.setValue(i, j, data[i][j] - other.data[i][j]);
+        }
+		}
+    return result;
+}
+
+Matrix Matrix::operator/( const Matrix& other ) { // element-wise multiplication
+    if( rows!=other.rows || cols != other.cols){
+			return *(new Matrix());
+		}
+		Matrix result = Matrix(rows, cols);
+    
+		for( int i = 0 ; i < rows; ++i )
+        for( int j = 0 ; j < cols ; ++j ){
+            result.setValue(i, j, data[i][j] / other.data[i][j]);
+        }
+    
+    return result;
+}
 Matrix::~Matrix(){
     if( data != NULL ){
 		for( int i = 0 ; i < rows ; ++i ){
