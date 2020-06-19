@@ -49,6 +49,39 @@ __global__ void DynamicSobelConvolution(float *image, float *result, int imageWi
 	}
 }
 
+__global__ void DynamicSobelConvolution(float *image, float *result, int imageWidth, int imageHeight, const float* __restrict__ gx, const float* __restrict__ gy, int TILE_WIDTH, int BLOCK_WIDTH, int dim){
+	extern __shared__ float imageDS[]; //Dynamic shared memory
+	int tx = threadIdx.x, ty = threadIdx.y;
+	int rowIn = blockIdx.y * TILE_WIDTH + ty;
+	int colIn = blockIdx.x * TILE_WIDTH + tx;
+	int radio = SOBEL_MASK_SIZE / 2;
+	int rowOut = rowIn - radio;
+	int colOut = colIn - radio;
+	
+	//Copy from global memory to shared memory
+	if (rowOut < imageHeight && colOut < imageWidth && rowOut >= 0 && colOut >= 0)
+		imageDS[getIndex(ty, tx, BLOCK_WIDTH )] = image[getIndex(rowOut, colOut, imageWidth)];
+	else
+		imageDS[getIndex(ty, tx, BLOCK_WIDTH)] = 0.0;
+
+	__syncthreads();
+
+	//Convolve image with Gradient Masks
+	float sumG = 0.0;
+	if (ty < TILE_WIDTH && tx < TILE_WIDTH){
+		for (int i = 0; i < SOBEL_MASK_SIZE; ++i){
+			for (int j = 0; j < SOBEL_MASK_SIZE; ++j){
+				if(dim==0){
+					sumG += gx[getIndex(i, j, SOBEL_MASK_SIZE)] * imageDS[getIndex(i + ty, j + tx, BLOCK_WIDTH)];
+				}else if(dim==1){
+					sumG += gy[getIndex(i, j, SOBEL_MASK_SIZE)] * imageDS[getIndex(i + ty, j + tx, BLOCK_WIDTH)];
+				}
+			}
+		}
+		if (rowIn < imageHeight && colIn < imageWidth)
+			result[getIndex(rowIn, colIn, imageWidth)] = sumG;
+	}
+}
 /**
 Tiled Convolution: Implementation of Sobel Convolution 2D using shared memory.
 **/

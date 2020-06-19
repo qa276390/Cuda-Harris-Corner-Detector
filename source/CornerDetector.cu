@@ -15,6 +15,7 @@ using namespace std;
 #define DYNAMIC_GAUSS //Comment if you want to use static parameters in tiled convolution
 #define DYNAMIC_SOBEL //Comment if you want to use static parameters in tiled convolution
 float parallelCornerDetector(Matrix grayImage, Matrix gaussianKernel, string pathName, int numThreads);
+float parallelHarrisCornerDetector(Matrix grayImage, Matrix gaussianKernel, string pathName, int numThreads);
 float serialCornerDetector(Matrix grayImage, Matrix gaussianKernel, string pathName);
 float serialHarrisCornerDetector(Matrix grayImage, string pathName, int gaussKernelSize, double sigma);
 
@@ -79,6 +80,7 @@ int main(int argc, char* argv[]){
 	*/
 
 	double serialHarrisTime = serialHarrisCornerDetector(grayImage, outputFileName, gaussKernelSize, sigma);
+	double parallelHarrisTime = parallelHarrisCornerDetector(grayImage, gaussianKernel, outputFileName, numThreads);
 
 
 
@@ -91,9 +93,9 @@ int main(int argc, char* argv[]){
 
 
 /*
-Parallel Corner Detection using CUDA
+	Harris Parallel Corner Detection using CUDA
 */
-float parallelCornerDetector(Matrix grayImage, Matrix gaussianKernel, string pathName, int numThreads){
+float parallelHarrisCornerDetector(Matrix grayImage, Matrix gaussianKernel, string pathName, int numThreads){
 
 	int imageWidth = grayImage.getCols(), imageHeight = grayImage.getRows();
 	int imageSize = imageWidth * imageHeight;
@@ -104,7 +106,9 @@ float parallelCornerDetector(Matrix grayImage, Matrix gaussianKernel, string pat
 	cudaError_t err;
 
 	//Arrays of CPU
-	float* result = allocateArray(imageSize);
+	//float* result = allocateArray(imageSize);
+	float* IxHost = allocateArray(imageSize);
+	float* IyHost = allocateArray(imageSize);
 	float* grayImageArray = grayImage.toArray();
 	float* gaussKernelArray = gaussianKernel.toArray();
 	float* xGradient = getGradientX(), *yGradient = getGradientY(); //Used in Sobel
@@ -113,10 +117,13 @@ float parallelCornerDetector(Matrix grayImage, Matrix gaussianKernel, string pat
 	float* kernelDevice; //Used in Gauss
 	float* xGradDevice, *yGradDevice; //Used in Sobel
 	float* imageDevice, *resultDevice; //Used in both Gauss and Sobel
+	float* IxDevice, *IyDevice; //Used in both Gauss and Sobel
 
 	//Allocate Device Memory
 	cudaMalloc((void**)&imageDevice, imageSize * sizeof(float));
 	cudaMalloc((void**)&resultDevice, imageSize* sizeof(float));
+	cudaMalloc((void**)&IxDevice, imageSize* sizeof(float));
+	cudaMalloc((void**)&IyDevice, imageSize* sizeof(float));
 	cudaMalloc((void**)&kernelDevice, kernelSize * kernelSize * sizeof(float));
 	cudaMalloc((void**)&xGradDevice, SOBEL_MASK_SIZE * SOBEL_MASK_SIZE * sizeof(float));
 	cudaMalloc((void**)&yGradDevice, SOBEL_MASK_SIZE * SOBEL_MASK_SIZE * sizeof(float));
@@ -180,7 +187,8 @@ float parallelCornerDetector(Matrix grayImage, Matrix gaussianKernel, string pat
 	//Start recording GPU time
 	cudaEventRecord(start, 0);
 #ifdef DYNAMIC_SOBEL
-	DynamicSobelConvolution << < dimGaussGrid, dimGaussBlock, blockWidth * blockWidth * sizeof(float) >> > (imageDevice, resultDevice, imageWidth, imageHeight, xGradDevice, yGradDevice, sobelTileWidth, sobelBlockWidth);
+	DynamicSobelConvolution << < dimGaussGrid, dimGaussBlock, blockWidth * blockWidth * sizeof(float) >> > (imageDevice, IxDevice, imageWidth, imageHeight, xGradDevice, yGradDevice, sobelTileWidth, sobelBlockWidth, 0);
+	DynamicSobelConvolution << < dimGaussGrid, dimGaussBlock, blockWidth * blockWidth * sizeof(float) >> > (imageDevice, IyDevice, imageWidth, imageHeight, xGradDevice, yGradDevice, sobelTileWidth, sobelBlockWidth, 1);
 #else	
 	tiledSobelConvolution << < dimGridSobel, dimBlockSobel >> > (imageDevice, resultDevice, imageWidth, imageHeight, xGradDevice, yGradDevice);
 #endif	
@@ -197,36 +205,71 @@ float parallelCornerDetector(Matrix grayImage, Matrix gaussianKernel, string pat
 	////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 	//Copy Result from GPU to CPU
-	cudaMemcpy(result, resultDevice, imageSize * sizeof(float), cudaMemcpyDeviceToHost);
+	cudaMemcpy(IxHost, IxDevice, imageSize * sizeof(float), cudaMemcpyDeviceToHost);
+	cudaMemcpy(IyHost, IyDevice, imageSize * sizeof(float), cudaMemcpyDeviceToHost);
+
+	Matrix Ix = Matrix(arrayToMatrix(IxHost, imageHeight, imageWidth));
+	Matrix Iy = Matrix(arrayToMatrix(IyHost, imageHeight, imageWidth));
+
+	//////////Calculate S_(x^2), S_(y^2), S_(x*y)//////////////
+	Matrix Ixx = Ix * Ix;
+	Matrix Iyy = Iy * Iy;
+	Matrix Ixy = Ix * Iy;
+	float* IxxArray = Ixx.toArray(), *IyyArray = Iyy.toArray(), *IxyArray = Ixy.toArray();
+	float* kernelArray = gaussianKernel.toArray();
+	
+	Matrix Sxx = GaussianBlur(IxxArray, kernelArray,Ixx.getRows(),
+									   Ixx.getCols(), gaussianKernel.getRows());
+	Matrix Syy = GaussianBlur(IyyArray, kernelArray, Iyy.getRows(),
+									   Iyy.getCols(), gaussianKernel.getRows());
+	Matrix Sxy = GaussianBlur(IxyArray, kernelArray, Ixy.getRows(),
+									   Ixy.getCols(), gaussianKernel.getRows());
+
+	freeArray(IxxArray);
+	freeArray(IyyArray);
+	freeArray(IxyArray);
+	freeArray(kernelArray);
+	///////////////////////////////////////////////////////////
+
+
+
+	//////////Calculate R = det(M) - k(trace(M))^2///////////// 
+  Matrix detM = Sxx * Syy - Sxy * Sxy;
+	Matrix trM = Sxx + Syy;
+	Matrix R = detM/(trM + 1E-8);
+
+	///////////////////////////////////////////////////////////
+
 
 	///////////////Save Image Result/////////////////
-	PPMImage* imageResult = createImage(imageHeight, imageWidth);
-	Matrix dataResult = arrayToMatrix(result, imageHeight, imageWidth);
-	Matrix normalized = normalize(dataResult, 0, 255); //Normalize values
-	matrixToImage(normalized, imageResult);
-    #ifdef _WIN32
-		pathName = "..\\output\\"+pathName+"_gpu.ppm";
-    #else
-	    pathName = "../output/"+pathName+"_gpu.ppm";
+	PPMImage* result = createImage(R.getRows(), R.getCols());
+	Matrix normalized = normalize(R, 0, 255);
+	matrixToImage(normalized, result);
+  #ifdef _WIN32
+		pathName = "..\\output\\"+pathName+"_harris_gpu.ppm";
+	#else
+	    pathName = "../output/"+pathName+"_harris_gpu.ppm";  
 	#endif
-    writePPM(pathName.c_str(), imageResult);
-	freeImage(imageResult);
+	writePPM(pathName.c_str(), result);
+	freeImage(result);
 	/////////////////////////////////////////////////
 
-	cout << "GPU Gauss Time: " << setprecision(3) << fixed << gaussTime << "s." << endl;
-	cout << "GPU Sobel Time: " << setprecision(3) << fixed << sobelTime << "s." << endl;
-	cout << "GPU Time: " << setprecision(3) << fixed << gaussTime + sobelTime << "s." << endl;
+	cout << "GPU Harris Gauss Time: " << setprecision(3) << fixed << gaussTime << "s." << endl;
+	cout << "GPU Harris Sobel Time: " << setprecision(3) << fixed << sobelTime << "s." << endl;
+	cout << "GPU Harris Time: " << setprecision(3) << fixed << gaussTime + sobelTime << "s." << endl;
 
 	////////////////Free Memory used in GPU and CPU//////////////////
 	cudaFree(xGradDevice);	cudaFree(yGradDevice); cudaFree(imageDevice);
 	cudaFree(resultDevice); cudaFree(kernelDevice);
-	freeArray(xGradient);	freeArray(yGradient);  freeArray(result);
+	freeArray(xGradient);	freeArray(yGradient);  //freeArray(result);
 	freeArray(grayImageArray); freeArray(gaussKernelArray);
 	/////////////////////////////////////////////////////////////////
 	return gaussTime + sobelTime;
 }
-
-float parallelHarrisCornerDetector(Matrix grayImage, Matrix gaussianKernel, string pathName, int numThreads){
+/*
+	 
+*/
+float parallelCornerDetector(Matrix grayImage, Matrix gaussianKernel, string pathName, int numThreads){
 
 	int imageWidth = grayImage.getCols(), imageHeight = grayImage.getRows();
 	int imageSize = imageWidth * imageHeight;
@@ -494,6 +537,10 @@ float serialHarrisCornerDetector(Matrix grayImage,  string pathName, int gaussKe
 	//double gaussTime = clockTicksTaken / (double)CLOCKS_PER_SEC; //gaussTime *= 1000.0;
 	
 	///////////////Save Image Result/////////////////
+	/* 
+		 to-do: showHarrisResult(img, harris_response)
+	 */
+	//result = showHarrisResult(grayImage, R);
 	result = createImage(R.getRows(), R.getCols());
 	normalized = normalize(R, 0, 255);
 	matrixToImage(normalized, result);
