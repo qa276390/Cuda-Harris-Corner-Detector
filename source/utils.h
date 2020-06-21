@@ -14,6 +14,32 @@ double getGrayFromRGB( double R , double G , double B ){
 	return 0.299 * R + 0.587 * G + 0.114 * B;
 }
 
+
+/*
+Combine the Image and Harris Corner Response Map
+*/
+PPMImage* showHarrisResult(PPMImage* image, Matrix &resMap) {
+	int nRows = resMap.getRows();
+	int nCols = resMap.getCols();
+	float maxRes = resMap.getMax();
+	PPMImage* newimage = createImage(nRows, nCols);
+	for (int i = 0; i < nRows; ++i){
+		for (int j = 0; j < nCols; ++j){
+			if(resMap.at(i, j) > 0.01 * maxRes){
+				newimage->data[i * nCols + j].red = 255;
+				newimage->data[i * nCols + j].green = image->data[i * nCols + j].green;
+				newimage->data[i * nCols + j].blue = image->data[i * nCols + j].blue;
+			}else{
+				newimage->data[i * nCols + j].red = image->data[i * nCols +j].red;
+				newimage->data[i * nCols + j].green = image->data[i * nCols + j].green;
+				newimage->data[i * nCols + j].blue = image->data[i * nCols + j].blue;
+			}
+		}
+	}
+	return newimage;
+}
+
+
 /*
 Conversion of an image from RBG to Gray
 */
