@@ -13,8 +13,8 @@ using namespace std;
 #include "GaussFilter.cuh" //Parallel Gauss
 #include "SobelFilter.cuh" //Parallel Sobel
 #include "VectorOperation.cuh" //Vector Operation
-#define DYNAMIC_GAUSS //Comment if you want to use static parameters in tiled convolution
-#define DYNAMIC_SOBEL //Comment if you want to use static parameters in tiled convolution
+//#define DYNAMIC_GAUSS //Comment if you want to use static parameters in tiled convolution
+//#define DYNAMIC_SOBEL //Comment if you want to use static parameters in tiled convolution
 float parallelHarrisCornerDetector(PPMImage* rgbimage, Matrix grayImage, Matrix gaussianKernel, string pathName, int numThreads);
 float serialHarrisCornerDetector(PPMImage* rgbimage, Matrix grayImage, string pathName, int gaussKernelSize, double sigma);
 
@@ -66,6 +66,7 @@ int main(int argc, char* argv[]){
 	// Harris Corner Detector
 	double parallelHarrisTime = parallelHarrisCornerDetector(image, grayImage, gaussianKernel, outputFileName, numThreads);
 	double serialHarrisTime = serialHarrisCornerDetector(image, grayImage, outputFileName, gaussKernelSize, sigma);
+
 
 
 	cout << "Speedingup: " << serialHarrisTime / parallelHarrisTime << endl;
