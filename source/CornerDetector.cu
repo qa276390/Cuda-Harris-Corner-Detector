@@ -64,11 +64,11 @@ int main(int argc, char* argv[]){
 
 
 	// Harris Corner Detector
-	//double serialHarrisTime = serialHarrisCornerDetector(image, grayImage, outputFileName, gaussKernelSize, sigma);
 	double parallelHarrisTime = parallelHarrisCornerDetector(image, grayImage, gaussianKernel, outputFileName, numThreads);
+	double serialHarrisTime = serialHarrisCornerDetector(image, grayImage, outputFileName, gaussKernelSize, sigma);
 
 
-	//cout << "Speedingup: " << serialHarrisTime / parallelHarrisTime << endl;
+	cout << "Speedingup: " << serialHarrisTime / parallelHarrisTime << endl;
 
 
 
