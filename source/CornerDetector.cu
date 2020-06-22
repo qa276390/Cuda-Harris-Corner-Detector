@@ -190,7 +190,8 @@ float parallelHarrisCornerDetector(PPMImage* rgbImage, Matrix grayImage, Matrix 
 		DynamicSobelConvolution << < dimGaussGrid, dimGaussBlock, blockWidth * blockWidth * sizeof(float) >> > (imageDevice, IxDevice, imageWidth, imageHeight, xGradDevice, yGradDevice, sobelTileWidth, sobelBlockWidth, 0);
 		DynamicSobelConvolution << < dimGaussGrid, dimGaussBlock, blockWidth * blockWidth * sizeof(float) >> > (imageDevice, IyDevice, imageWidth, imageHeight, xGradDevice, yGradDevice, sobelTileWidth, sobelBlockWidth, 1);
 	#else	
-		tiledSobelConvolution << < dimGridSobel, dimBlockSobel >> > (imageDevice, resultDevice, imageWidth, imageHeight, xGradDevice, yGradDevice);
+		tiledSobelConvolution << < dimGridSobel, dimBlockSobel >> > (imageDevice, IxDevice, imageWidth, imageHeight, xGradDevice, yGradDevice, 0);
+		tiledSobelConvolution << < dimGridSobel, dimBlockSobel >> > (imageDevice, IyDevice, imageWidth, imageHeight, xGradDevice, yGradDevice, 1);
 	#endif	
 	err = cudaGetLastError();
 	if (err != cudaSuccess)	printf("Sobel Error: %s\n", cudaGetErrorString(err));
@@ -246,10 +247,9 @@ float parallelHarrisCornerDetector(PPMImage* rgbImage, Matrix grayImage, Matrix 
 		DynamicTiledConvolution << < dimGaussGrid, dimGaussBlock, blockWidth * blockWidth * sizeof(float) >> > (IyyDevice, SyyDevice, imageWidth, imageHeight, kernelDevice, kernelSize, tileWidth, blockWidth);
 		DynamicTiledConvolution << < dimGaussGrid, dimGaussBlock, blockWidth * blockWidth * sizeof(float) >> > (IxyDevice, SxyDevice, imageWidth, imageHeight, kernelDevice, kernelSize, tileWidth, blockWidth);
 	#else
-		// to-do
-		tiledConvolution << < dimGaussGrid, dimGaussBlock, 1 >> > (imageDevice, resultDevice, imageWidth, imageHeight, kernelDevice, kernelSize);
-		tiledConvolution << < dimGaussGrid, dimGaussBlock, 1 >> > (imageDevice, resultDevice, imageWidth, imageHeight, kernelDevice, kernelSize);
-		tiledConvolution << < dimGaussGrid, dimGaussBlock, 1 >> > (imageDevice, resultDevice, imageWidth, imageHeight, kernelDevice, kernelSize);
+		tiledConvolution << < dimGaussGrid, dimGaussBlock, 1 >> > (IxxDevice, SxxDevice, imageWidth, imageHeight, kernelDevice, kernelSize);
+		tiledConvolution << < dimGaussGrid, dimGaussBlock, 1 >> > (IyyDevice, SyyDevice, imageWidth, imageHeight, kernelDevice, kernelSize);
+		tiledConvolution << < dimGaussGrid, dimGaussBlock, 1 >> > (IxyDevice, SxyDevice, imageWidth, imageHeight, kernelDevice, kernelSize);
 	#endif	
 	err = cudaGetLastError();
 	if (err != cudaSuccess)	printf("Gauss Error: %s\n", cudaGetErrorString(err));

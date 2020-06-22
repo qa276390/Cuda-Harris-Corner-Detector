@@ -116,6 +116,43 @@ __global__ void tiledSobelConvolution(float *image, float *result, int imageWidt
 	}
 }
 
+__global__ void tiledSobelConvolution(float *image, float *result, int imageWidth, int imageHeight, const float* __restrict__ gx, const float* __restrict__ gy, int dim){
+	__shared__ float imageDS[SOBEL_BLOCK_WIDTH][SOBEL_BLOCK_WIDTH];
+	int tx = threadIdx.x, ty = threadIdx.y;
+	int rowIn = blockIdx.y * SOBEL_TILE_WIDTH + ty;
+	int colIn = blockIdx.x * SOBEL_TILE_WIDTH + tx;
+	int radio = SOBEL_MASK_SIZE / 2;
+	int rowOut = rowIn - radio;
+	int colOut = colIn - radio;
+
+	//Copy from global memory to shared memory
+	if (rowOut < imageHeight && colOut < imageWidth && rowOut >= 0 && colOut >= 0)
+		imageDS[ty][tx] = image[getIndex(rowOut, colOut, imageWidth)];
+	else
+		imageDS[ty][tx] = 0.0;
+
+	__syncthreads();
+
+	//Convolve image with Gradient Masks
+	float sumG = 0.0;
+	if (ty < SOBEL_TILE_WIDTH && tx < SOBEL_TILE_WIDTH){
+		for (int i = 0; i < SOBEL_MASK_SIZE; ++i){
+			for (int j = 0; j < SOBEL_MASK_SIZE; ++j){
+				if(dim==0){
+					sumG += gx[getIndex(i, j, SOBEL_MASK_SIZE)] * imageDS[i + ty][j + tx];
+				}else if(dim==1){
+					sumG += gy[getIndex(i, j, SOBEL_MASK_SIZE)] * imageDS[i + ty][j + tx];
+				}
+
+
+
+			}
+		}
+		if (rowIn < imageHeight && colIn < imageWidth)
+			result[getIndex(rowIn, colIn, imageWidth)] = sumG;
+	}
+}
+
 /**
 Naive implementation of Sobel Convolution
 **/
@@ -140,4 +177,27 @@ __global__ void naiveSobelConvolution(float *image, float *result, int imageWidt
 	}
 }
 
+__global__ void naiveSobelConvolution(float *image, float *result, int imageWidth, int imageHeight, float*gx, float*gy, int maskSize, int dim){
+	int i = blockDim.x * blockIdx.x + threadIdx.x;
+	int j = blockDim.y * blockIdx.y + threadIdx.y;
+	if (i < imageHeight && j < imageWidth){
+		float sumG = 0.0;
+		int radio = maskSize / 2;
+		for (int x = -radio; x <= radio; ++x){
+			for (int y = -radio; y <= radio; ++y){
+				int nx = x + i;
+				int ny = y + j;
+				if (nx >= 0 && ny >= 0 && nx < imageHeight && ny < imageWidth){
+					float valueNeighbor = image[nx * imageWidth + ny];
+					if(dim == 0){
+						sumG += gx[getIndex(x + radio, y + radio, maskSize)] * valueNeighbor;
+					}else if(dim == 1){
+						sumG += gy[getIndex(x + radio, y + radio, maskSize)] * valueNeighbor;
+					}
+				}
+			}
+		}
+		result[i * imageWidth + j] = sumG;
+	}
+}
 #endif
