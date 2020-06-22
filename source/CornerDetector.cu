@@ -12,6 +12,7 @@ using namespace std;
 #include "Sobel.h" //Serial Sobel
 #include "GaussFilter.cuh" //Parallel Gauss
 #include "SobelFilter.cuh" //Parallel Sobel
+#include "VectorOperation.cuh" //Vector Operation
 #define DYNAMIC_GAUSS //Comment if you want to use static parameters in tiled convolution
 #define DYNAMIC_SOBEL //Comment if you want to use static parameters in tiled convolution
 float parallelHarrisCornerDetector(PPMImage* rgbimage, Matrix grayImage, Matrix gaussianKernel, string pathName, int numThreads);
@@ -87,10 +88,13 @@ float parallelHarrisCornerDetector(PPMImage* rgbImage, Matrix grayImage, Matrix 
 	int imageWidth = grayImage.getCols(), imageHeight = grayImage.getRows();
 	int imageSize = imageWidth * imageHeight;
 	int kernelSize = gaussianKernel.getRows();
-	float gaussTime = 0.0, sobelTime = 0.0, STime = 0.0;
+	float gaussTime = 0.0, sobelTime = 0.0, STime = 0.0, vecTime = 0.0, vecTime0 = 0.0;
 	cudaEvent_t start, stop;
 	cudaEventCreate(&start);	cudaEventCreate(&stop);
 	cudaError_t err;
+	
+	int threadsPerBlock = 64;
+	int blocksPerGrid = (imageSize + threadsPerBlock - 1)/threadsPerBlock;
 
 	startTime = clock();
 	//Arrays of CPU
@@ -100,6 +104,7 @@ float parallelHarrisCornerDetector(PPMImage* rgbImage, Matrix grayImage, Matrix 
 	float* SxxHost = allocateArray(imageSize);
 	float* SyyHost = allocateArray(imageSize);
 	float* SxyHost = allocateArray(imageSize);
+	float* RHost = allocateArray(imageSize);
 	float* grayImageArray = grayImage.toArray();
 	float* gaussKernelArray = gaussianKernel.toArray();
 	float* xGradient = getGradientX(), *yGradient = getGradientY(); //Used in Sobel
@@ -110,7 +115,8 @@ float parallelHarrisCornerDetector(PPMImage* rgbImage, Matrix grayImage, Matrix 
 	float* imageDevice, *resultDevice; //Used in both Gauss and Sobel
 	float* IxDevice, *IyDevice; //Used in both Gauss and Sobel
 	float* IxxDevice, *IyyDevice, *IxyDevice; //Used in both Gauss and Sobel
-	float* SxxDevice, *SyyDevice, *SxyDevice; //Used in both Gauss and Sobel
+	float* SxxDevice, *SyyDevice, *SxyDevice; //
+	float* tmp1Device, *tmp2Device, *detMDevice, *trMDevice, *ResponseDevice; //
 
 	//Allocate Device Memory
 	cudaMalloc((void**)&imageDevice, imageSize * sizeof(float));
@@ -123,6 +129,11 @@ float parallelHarrisCornerDetector(PPMImage* rgbImage, Matrix grayImage, Matrix 
 	cudaMalloc((void**)&SxxDevice, imageSize* sizeof(float));
 	cudaMalloc((void**)&SyyDevice, imageSize* sizeof(float));
 	cudaMalloc((void**)&SxyDevice, imageSize* sizeof(float));
+	cudaMalloc((void**)&tmp1Device, imageSize* sizeof(float));
+	cudaMalloc((void**)&tmp2Device, imageSize* sizeof(float));
+	cudaMalloc((void**)&detMDevice, imageSize* sizeof(float));
+	cudaMalloc((void**)&trMDevice, imageSize* sizeof(float));
+	cudaMalloc((void**)&ResponseDevice, imageSize* sizeof(float));
 	cudaMalloc((void**)&kernelDevice, kernelSize * kernelSize * sizeof(float));
 	cudaMalloc((void**)&xGradDevice, SOBEL_MASK_SIZE * SOBEL_MASK_SIZE * sizeof(float));
 	cudaMalloc((void**)&yGradDevice, SOBEL_MASK_SIZE * SOBEL_MASK_SIZE * sizeof(float));
@@ -192,7 +203,8 @@ float parallelHarrisCornerDetector(PPMImage* rgbImage, Matrix grayImage, Matrix 
 	#else	
 		tiledSobelConvolution << < dimGridSobel, dimBlockSobel >> > (imageDevice, IxDevice, imageWidth, imageHeight, xGradDevice, yGradDevice, 0);
 		tiledSobelConvolution << < dimGridSobel, dimBlockSobel >> > (imageDevice, IyDevice, imageWidth, imageHeight, xGradDevice, yGradDevice, 1);
-	#endif	
+	#endif
+
 	err = cudaGetLastError();
 	if (err != cudaSuccess)	printf("Sobel Error: %s\n", cudaGetErrorString(err));
 
@@ -204,6 +216,27 @@ float parallelHarrisCornerDetector(PPMImage* rgbImage, Matrix grayImage, Matrix 
 	cudaEventElapsedTime(&sobelTime, start, stop);
 	sobelTime *= 0.001; //Milliseconds to Seconds
 
+	/*
+		Ixx = Ix * Ix ...
+	*/
+	cudaEventRecord(start, 0);
+	VecOperation<<<blocksPerGrid, threadsPerBlock>>>(IxDevice, IxDevice, IxxDevice, imageSize, 2); // 2: Multiplication(*)
+	VecOperation<<<blocksPerGrid, threadsPerBlock>>>(IyDevice, IyDevice, IyyDevice, imageSize, 2); // 2: Multiplication(*)
+	VecOperation<<<blocksPerGrid, threadsPerBlock>>>(IxDevice, IyDevice, IxyDevice, imageSize, 2); // 2: Multiplication(*)
+	
+	err = cudaGetLastError();
+	if (err != cudaSuccess)	printf("VecOpeartion 0 Error: %s\n", cudaGetErrorString(err));
+
+	//GPU time recording finished
+	cudaEventRecord(stop, 0);
+	cudaEventSynchronize(stop);
+
+	//Copy GPU Time
+	cudaEventElapsedTime(&vecTime0, start, stop);
+	sobelTime *= 0.001; //Milliseconds to Seconds
+	
+
+	/*
 	startTime = clock();
 	//Copy Result from GPU to CPU
 	cudaMemcpy(IxHost, IxDevice, imageSize * sizeof(float), cudaMemcpyDeviceToHost);
@@ -233,13 +266,12 @@ float parallelHarrisCornerDetector(PPMImage* rgbImage, Matrix grayImage, Matrix 
 	cudaMemcpy(IyyDevice, IyyArray, imageSize * sizeof(float), cudaMemcpyHostToDevice);
 	cudaMemcpy(IxyDevice, IxyArray, imageSize * sizeof(float), cudaMemcpyHostToDevice);
 	cudaMemcpy(kernelDevice, gaussKernelArray, kernelSize * kernelSize * sizeof(float), cudaMemcpyHostToDevice);
-
 	cudaMemcpy(xGradDevice, xGradient, SOBEL_MASK_SIZE * SOBEL_MASK_SIZE * sizeof(float), cudaMemcpyHostToDevice);
 	cudaMemcpy(yGradDevice, yGradient, SOBEL_MASK_SIZE * SOBEL_MASK_SIZE * sizeof(float), cudaMemcpyHostToDevice);
 	endTime = clock();
 	clockTicksTaken = endTime - startTime;
 	gpuInTime += clockTicksTaken / (double)CLOCKS_PER_SEC; 
-	
+ 	*/	
 	//Start recording GPU time
 	cudaEventRecord(start, 0);
 	#ifdef DYNAMIC_GAUSS
@@ -262,8 +294,41 @@ float parallelHarrisCornerDetector(PPMImage* rgbImage, Matrix grayImage, Matrix 
 	STime *= 0.001;//Milliseconds to Seconds
 
 	cudaDeviceSynchronize();
+
+
+
+
+	/* Compute R = detM / trM*/
+	cudaEventRecord(start, 0);
+	VecOperation<<<blocksPerGrid, threadsPerBlock>>>(SxxDevice, SyyDevice, tmp1Device, imageSize, 2); // 2: Multiplication
+	VecOperation<<<blocksPerGrid, threadsPerBlock>>>(SxyDevice, SxyDevice, tmp2Device, imageSize, 2); // 
+	VecOperation<<<blocksPerGrid, threadsPerBlock>>>(tmp1Device, tmp2Device, detMDevice, imageSize, 1); // 0: Addition
+
+	VecOperation<<<blocksPerGrid, threadsPerBlock>>>(SxxDevice, SyyDevice, trMDevice, imageSize, 0); // 0: Addition, trM = Sxx + Syy
 	
+	VecOperation<<<blocksPerGrid, threadsPerBlock>>>(detMDevice, trMDevice, ResponseDevice, imageSize, 3); // 3: devision
+	
+	err = cudaGetLastError();
+	if (err != cudaSuccess)	printf("VecOperation Error: %s\n", cudaGetErrorString(err));
+	//GPU time recording finished
+	cudaEventRecord(stop, 0);
+	cudaEventSynchronize(stop);
+
+	//Copy GPU Time
+	cudaEventElapsedTime(&vecTime, start, stop);
+	vecTime *= 0.001;//Milliseconds to Seconds
+
+	// GPU output
 	startTime = clock();
+	cudaMemcpy(RHost, ResponseDevice, imageSize * sizeof(float), cudaMemcpyDeviceToHost);
+	Matrix R = Matrix(arrayToMatrix(RHost, imageHeight, imageWidth));
+	endTime = clock();
+	clockTicksTaken = endTime - startTime;
+	double gpuOutTime = clockTicksTaken / (double)CLOCKS_PER_SEC; 
+	
+	/*
+	startTime = clock();
+	// Copy S from Device to Host
 	cudaMemcpy(SxxHost, SxxDevice, imageSize * sizeof(float), cudaMemcpyDeviceToHost);
 	cudaMemcpy(SyyHost, SyyDevice, imageSize * sizeof(float), cudaMemcpyDeviceToHost);
 	cudaMemcpy(SxyHost, SxyDevice, imageSize * sizeof(float), cudaMemcpyDeviceToHost);
@@ -272,6 +337,7 @@ float parallelHarrisCornerDetector(PPMImage* rgbImage, Matrix grayImage, Matrix 
 	clockTicksTaken = endTime - startTime;
 	gpuOutTime += clockTicksTaken / (double)CLOCKS_PER_SEC; 
 	
+
 	startTime = clock();
 	Matrix Sxx = Matrix(arrayToMatrix(SxxHost, imageHeight, imageWidth));
 	Matrix Syy = Matrix(arrayToMatrix(SyyHost, imageHeight, imageWidth));
@@ -290,7 +356,7 @@ float parallelHarrisCornerDetector(PPMImage* rgbImage, Matrix grayImage, Matrix 
 	endTime = clock();
 	clockTicksTaken = endTime - startTime;
 	MatrixTime += clockTicksTaken / (double)CLOCKS_PER_SEC; 
-
+	*/
 
 	// Save Image Result
 	
@@ -320,16 +386,19 @@ float parallelHarrisCornerDetector(PPMImage* rgbImage, Matrix grayImage, Matrix 
 	cout << "GPU Harris Sobel Time: " << setprecision(3) << fixed << sobelTime << "s." << endl;
 	cout << "GPU Harris SG Time: " << setprecision(3) << fixed << STime << "s." << endl;
 	cout << "GPU Harris Device to Host Time: " << setprecision(3) << fixed << gpuOutTime << "s." << endl;
-	cout << "GPU Harris Matrix Time: " << setprecision(3) << fixed << MatrixTime << "s." << endl;
-	cout << "GPU Harris Time: " << setprecision(3) << fixed << gaussTime + sobelTime + STime + gpuInTime + gpuOutTime + MatrixTime << "s." << endl;
+	cout << "GPU Harris Matrix Time: " << setprecision(3) << fixed << vecTime << "s." << endl;
+	cout << "GPU Harris Matrix Time: " << setprecision(3) << fixed << vecTime0 << "s." << endl;
+	cout << "GPU Harris Time: " << setprecision(3) << fixed << gaussTime + sobelTime + STime + gpuInTime + gpuOutTime + vecTime + vecTime0 << "s." << endl;
 
 	// Free Memory used in GPU and CPU
 	cudaFree(xGradDevice);	cudaFree(yGradDevice); cudaFree(imageDevice);
-	cudaFree(resultDevice); cudaFree(kernelDevice);
+	cudaFree(resultDevice); cudaFree(kernelDevice); 
+	cudaFree(IxxDevice);cudaFree(IyyDevice);cudaFree(IxyDevice);
+	cudaFree(SxxDevice);cudaFree(SyyDevice);cudaFree(SxyDevice);
 	freeArray(xGradient);	freeArray(yGradient);  //freeArray(result);
 	freeArray(grayImageArray); freeArray(gaussKernelArray);
 	
-	return gaussTime + sobelTime + STime + gpuInTime + gpuOutTime + MatrixTime;
+	return gaussTime + sobelTime + STime + gpuInTime + gpuOutTime + vecTime + vecTime0;
 }
 
 /*
