@@ -35,4 +35,13 @@ __global__ void VecOperation(const float* A, const float* B, float* C, int N, in
 	__syncthreads();
 
 }
+__global__ void VecOpResponse(const float* Sxx, const float* Syy, const float* Sxy, float* C, int N){
+
+	int i = blockDim.x * blockIdx.x + threadIdx.x;
+	if (i < N){
+		//R = detM / trM
+		C[i] = (Sxx[i] * Syy [i] - Sxy[i] * Sxy[i]) / (Sxx[i] + Syy[i] + 1E-8);
+	}
+
+}
 #endif
