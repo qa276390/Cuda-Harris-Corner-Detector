@@ -2,7 +2,6 @@
 This project is a CUDA-acclerated Harris Corner Detector based on [Corner-Detector](https://github.com/jariasf/Corner-Detector).
 We implemented the project using C/C++ with ***i7-7700*** and ***RTX 2080Ti***.
 
--------------------------------------------------------------------------------------------------
 ## Usage
 
 ### Folder and Data
@@ -51,3 +50,18 @@ example
 ```
 ./CornerDetector ./input/IMG_0125.ppm
 ```
+## Results
+To compare the perfomance between CPU and GPU, we perform our Harris Corner Detector on a  image of size *3648x5472*, and the comparison results shown in *Table 1*. We could see that the GPU version is much faster the CPU version. 
+
+||CPU|GPU-Shared-Memory|GPU-Dynamic-Shared-Memory|
+|-|-|-|-|
+|Running Time|17.378s|0.246s|0.247s|
+|Difference| - | 0 | 0 |
+
+The output image shown below. The red spot are Harris Corner Response.
+<table>
+<tr>
+<th><img src="https://github.com/qa276390/Cuda_Harris_Corner_Detector/blob/master/output/IMG_0125_harris_show_gpu.jpg" /><br>Result from IMG_0125.ppm</th>
+<th><img src="https://github.com/qa276390/Cuda_Harris_Corner_Detector/blob/master/output/IMG_4486_harris_show_gpu.jpg" /><br>Result from IMG_4486.ppm</th>
+</tr>
+</table>
