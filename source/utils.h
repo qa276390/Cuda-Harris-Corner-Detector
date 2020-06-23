@@ -27,8 +27,8 @@ PPMImage* showHarrisResult(PPMImage* image, Matrix &resMap) {
 		for (int j = 0; j < nCols; ++j){
 			if(resMap.at(i, j) > 0.01 * maxRes){
 				newimage->data[i * nCols + j].red = 255;
-				newimage->data[i * nCols + j].green = image->data[i * nCols + j].green;
-				newimage->data[i * nCols + j].blue = image->data[i * nCols + j].blue;
+				newimage->data[i * nCols + j].green = 0;
+				newimage->data[i * nCols + j].blue = 0;
 			}else{
 				newimage->data[i * nCols + j].red = image->data[i * nCols +j].red;
 				newimage->data[i * nCols + j].green = image->data[i * nCols + j].green;

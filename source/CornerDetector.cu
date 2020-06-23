@@ -4,6 +4,7 @@
 #include <string>
 #include <iostream>
 #include <iomanip>
+#include <math.h>
 using namespace std;
 
 #include "Matrix.h" //Matrix class
@@ -15,8 +16,8 @@ using namespace std;
 #include "VectorOperation.cuh" //Vector Operation
 #define DYNAMIC_GAUSS //Comment if you want to use static parameters in tiled convolution
 #define DYNAMIC_SOBEL //Comment if you want to use static parameters in tiled convolution
-float parallelHarrisCornerDetector(PPMImage* rgbimage, Matrix grayImage, Matrix gaussianKernel, string pathName, int numThreads);
-float serialHarrisCornerDetector(PPMImage* rgbimage, Matrix grayImage, string pathName, int gaussKernelSize, double sigma);
+float parallelHarrisCornerDetector(PPMImage* rgbimage, Matrix grayImage, Matrix gaussianKernel, string pathName, int numThreads, Matrix Response);
+float serialHarrisCornerDetector(PPMImage* rgbimage, Matrix grayImage, Matrix gaussianKernel, string pathName, double sigma, Matrix Response);
 
 int main(int argc, char* argv[]){
 	if( argc == 1 ){
@@ -52,26 +53,28 @@ int main(int argc, char* argv[]){
 	// Read Image
 	cout << endl;
   PPMImage *image = readPPM(imagePathName.c_str());
-	string outputFileName = getFileName(imagePathName,false);	
-	cout << getFileName(imagePathName) << " -------------" << endl; 
+	string outputFileName = getFileName(imagePathName, false);	
+	cout << getFileName(imagePathName) << " ------------------------------" << endl; 
   cout << endl;
 
 	// Pre-Generate Gaussian Kernel
 	Matrix grayImage = rgb2gray(image);
 	Matrix gaussianKernel = createGaussianKernel(gaussKernelSize, sigma);
 
-
+	// To Store the Response
+	Matrix parallelResponse = Matrix(grayImage.getRows(), grayImage.getCols());
+	Matrix serialResponse = Matrix(grayImage.getRows(), grayImage.getCols());
 
 
 	// Harris Corner Detector
-	double parallelHarrisTime = parallelHarrisCornerDetector(image, grayImage, gaussianKernel, outputFileName, numThreads);
-	double serialHarrisTime = serialHarrisCornerDetector(image, grayImage, outputFileName, gaussKernelSize, sigma);
+	double parallelHarrisTime = parallelHarrisCornerDetector(image, grayImage, gaussianKernel, outputFileName, numThreads, parallelResponse);
+	double serialHarrisTime = serialHarrisCornerDetector(image, grayImage, gaussianKernel,  outputFileName, sigma, serialResponse);
 
 
 
 	cout << "Speedingup: " << serialHarrisTime / parallelHarrisTime << endl;
-
-
+	double sq_diff = ((parallelResponse - serialResponse) * (parallelResponse - serialResponse)).getMean();
+	cout << "Difference: " << sqrt(sq_diff) << endl;
 
 	//Free memory
 	freeImage(image);
@@ -83,7 +86,7 @@ int main(int argc, char* argv[]){
 /*
 	Harris Parallel Corner Detection using CUDA
 */
-float parallelHarrisCornerDetector(PPMImage* rgbImage, Matrix grayImage, Matrix gaussianKernel, string pathName, int numThreads){
+float parallelHarrisCornerDetector(PPMImage* rgbImage, Matrix grayImage, Matrix gaussianKernel, string pathName, int numThreads, Matrix Response){
 
 	clock_t startTime, endTime, clockTicksTaken;
 	int imageWidth = grayImage.getCols(), imageHeight = grayImage.getRows();
@@ -238,7 +241,7 @@ float parallelHarrisCornerDetector(PPMImage* rgbImage, Matrix grayImage, Matrix 
 
 	//Copy GPU Time
 	cudaEventElapsedTime(&vecTime0, start, stop);
-	sobelTime *= 0.001; //Milliseconds to Seconds
+	vecTime0 *= 0.001; //Milliseconds to Seconds
 	
 
 	/*
@@ -294,6 +297,7 @@ float parallelHarrisCornerDetector(PPMImage* rgbImage, Matrix grayImage, Matrix 
 	startTime = clock();
 	cudaMemcpy(RHost, ResponseDevice, imageSize * sizeof(float), cudaMemcpyDeviceToHost);
 	Matrix R = Matrix(arrayToMatrix(RHost, imageHeight, imageWidth));
+	Response = R;
 	endTime = clock();
 	clockTicksTaken = endTime - startTime;
 	double gpuOutTime = clockTicksTaken / (double)CLOCKS_PER_SEC; 
@@ -346,12 +350,12 @@ float parallelHarrisCornerDetector(PPMImage* rgbImage, Matrix grayImage, Matrix 
 CPU Harris Corner Detection
 */
 
-float serialHarrisCornerDetector(PPMImage* rgbImage, Matrix grayImage,  string pathName, int gaussKernelSize,double sigma){
+float serialHarrisCornerDetector(PPMImage* rgbImage, Matrix grayImage, Matrix gaussianKernel,  string pathName, double sigma, Matrix Response){
 	PPMImage* result;
 	Matrix normalized;
 	clock_t startTime, endTime, clockTicksTaken;
 	
-	Matrix gaussianKernel = createGaussianKernel(gaussKernelSize, sigma); // could be different sigma 
+	//Matrix gaussianKernel = createGaussianKernel(gaussKernelSize, sigma); // could be different sigma 
 	
 	// Gaussian Blur to Remove Noise
 	float* grayImageArray = grayImage.toArray(), *kernelArray = gaussianKernel.toArray();
@@ -395,6 +399,7 @@ float serialHarrisCornerDetector(PPMImage* rgbImage, Matrix grayImage,  string p
   Matrix detM = Sxx * Syy - Sxy * Sxy;
 	Matrix trM = Sxx + Syy;
 	Matrix R = detM/(trM + 1E-8);
+	Response = R;
 
 	
 	endTime = clock();

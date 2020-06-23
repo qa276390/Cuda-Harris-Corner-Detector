@@ -32,15 +32,18 @@ class Matrix{
         ~Matrix();
         inline void consolePrint();
         T& operator ()(int row, int column);
-		T getMin();
-		T getMax();
-		T* toArray();
+				T getMin();
+				T getMax();
+				T getSum();
+				T getMean();
+				T* toArray();
         inline void setValue( int row, int col, T value );
         int getRows();
         int getCols();
         void setRows(int row);
         void setCols(int col);
-		inline T at(int row, int col);
+				inline T at(int row, int col);
+				
 };
 
 void Matrix::consolePrint(){
@@ -238,6 +241,18 @@ T Matrix::getMax(){
 	return max;
 }
 
+T Matrix::getSum(){
+	T sum = data[0][0];
+	for (int i = 0; i < rows; ++i){
+		for (int j = 1; j < cols; ++j){
+				sum += data[i][j];
+		}
+	}
+	return sum;
+}
+T Matrix::getMean(){
+	return getSum() / (rows * cols);
+}
 T* Matrix::toArray(){
 	T* array = new T[ rows * cols ];
 	for (int i = 0; i < rows; ++i){
