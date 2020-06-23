@@ -25,8 +25,6 @@ Here is the directory tree structure for the project.
     ├── utils.h             // other utilities
     └── VectorOperation.cuh // CUDA header file of vector operation
 ```
-We also implemented the shard memory and dynamic shared memory version of sobel filter.
-
 
 ### Prepare Images 
 Put your images into the `./input` folder. Please note that the image must be `.ppm` format. With linux you can convert the image format using 
