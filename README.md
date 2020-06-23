@@ -38,3 +38,39 @@ Examples of execution:
 `./CornerDetector ../input/image1.ppm gaussMask=9` <br />
 `./CornerDetector ../input/image2.ppm gaussMask=7 tpb=32` <br />
 `./CornerDetector ../input/image3.ppm gaussMask=5 tpb=16 sigma=0.5` <br />
+.
+├── CornerDetector
+├── input
+│   ├── freeman-8k.jpg
+│   ├── freeman-8k.ppm
+│   ├── image1.ppm
+│   ├── image2.ppm
+│   ├── IMG_0125.jpg
+│   ├── IMG_0125.ppm
+│   ├── jpg2ppm.sh
+│   └── NTU.ppm
+├── Makefile
+├── output
+│   ├── freeman-8k_harris_gpu.ppm
+│   ├── freeman-8k_harris_show_gpu.ppm
+│   ├── IMG_0125_harris_cpu.ppm
+│   ├── IMG_0125_harris_gpu.ppm
+│   ├── IMG_0125_harris_show_cpu.ppm
+│   ├── IMG_0125_harris_show_gpu.ppm
+│   ├── NTU_harris_cpu.ppm
+│   ├── NTU_harris_gpu.ppm
+│   ├── NTU_harris_show_cpu.ppm
+│   └── NTU_harris_show_gpu.ppm
+├── README.md
+└── source
+    ├── CornerDetector.cu
+    ├── GaussFilter.cuh
+    ├── Gauss.h
+    ├── Matrix.h
+    ├── PPM.h
+    ├── SobelFilter.cuh
+    ├── Sobel.h
+    ├── utils.h
+    └── VectorOperation.cuh
+
+3 directories, 30 files
