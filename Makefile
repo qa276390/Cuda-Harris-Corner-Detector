@@ -5,7 +5,7 @@ RUN = $(SRCDIR)$(EXE)
 OUTPUT_DIR = $(BASEDIR)output/
 
 all: 
-	nvcc $(SRCDIR)CornerDetector.cu -o $(SRCDIR)$(EXE)
+	nvcc $(SRCDIR)CornerDetector.cu -o $(EXE)
 
 clean:
 	rm $(RUN)
