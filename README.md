@@ -65,3 +65,8 @@ The output image shown below. The red spot are Harris Corner Response.
 <th><img src="https://github.com/qa276390/Cuda_Harris_Corner_Detector/blob/master/output/IMG_4486_harris_show_gpu.jpg" /><br>Result from IMG_4486.ppm</th>
 </tr>
 </table>
+
+## Reference
+- [Digital Visual Effects, Yung-Yu Chuang](https://www.csie.ntu.edu.tw/~cyy/courses/vfx/20spring/assignments/proj1/)
+- [Introduction to Cuda Parallel Programming, Ting-Wai Chiu](https://nol2.aca.ntu.edu.tw/nol/coursesearch/print_table.php?course_id=222%20D3160&class=&dpt_code=2220&ser_no=35335&semester=106-2&lang=CH)
+- [Corner-Detector, jariasf](https://github.com/jariasf/Corner-Detector)
